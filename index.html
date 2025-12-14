@@ -6,6 +6,11 @@
     <title>Vaillancourt Family Meal Prepping</title>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Work+Sans:wght@300;400;500&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/html5-qrcode"></script>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    
     <style>
         :root {
             --cream: #FFF8F0;
@@ -365,12 +370,9 @@
 
         <div class="section">
             <h2><span class="icon">🥘</span> Your Pantry</h2>
-            
-            <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-                <button id="syncCopy" class="secondary" style="flex: 1; font-size: 0.85rem; padding: 0.6rem 1rem;">📋 Copy List</button>
-                <button id="syncPaste" class="secondary" style="flex: 1; font-size: 0.85rem; padding: 0.6rem 1rem;">📥 Paste List</button>
+            <div id="syncStatus" style="text-align: center; color: var(--sage); font-size: 0.85rem; margin-bottom: 1rem;">
+                <span id="syncIndicator">⚡ Auto-sync enabled</span>
             </div>
-            
             <div id="pantryList">
                 <div class="empty-state">
                     <div class="empty-state-icon">🍽️</div>
@@ -401,6 +403,31 @@
     </div>
 
     <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCSs76aKeTHM-bcO7YfAsD5dGBIq9rQMug",
+            authDomain: "meals-d0b62.firebaseapp.com",
+            databaseURL: "https://meals-d0b62-default-rtdb.firebaseio.com",
+            projectId: "meals-d0b62",
+            storageBucket: "meals-d0b62.firebasestorage.app",
+            messagingSenderId: "567359349252",
+            appId: "1:567359349252:web:11e76d5d0842361f950b51"
+        };
+
+        // Initialize Firebase
+        let database;
+        let isFirebaseReady = false;
+        
+        try {
+            firebase.initializeApp(firebaseConfig);
+            database = firebase.database();
+            isFirebaseReady = true;
+            console.log('Firebase initialized successfully');
+        } catch (error) {
+            console.log('Firebase not configured yet, using localStorage only');
+            isFirebaseReady = false;
+        }
+
         // Password protection
         const CORRECT_PASSWORD = 'VaillancourtMeals2024'; // Change this to whatever you want
         let isAuthenticated = sessionStorage.getItem('pantryAuth') === 'true';
@@ -420,6 +447,11 @@
         function init() {
             document.body.style.display = 'block';
             loadPantry();
+            
+            // Set up real-time sync listener if Firebase is ready
+            if (isFirebaseReady) {
+                setupRealtimeSync();
+            }
         }
 
         // Hide body until authenticated
@@ -432,31 +464,71 @@
 
         let html5QrCode;
         let pantryItems = [];
+        let isSyncing = false; // Prevent sync loops
+
+        function setupRealtimeSync() {
+            if (!isFirebaseReady) return;
+            
+            const pantryRef = database.ref('vaillancourt-pantry');
+            
+            // Listen for changes from the database
+            pantryRef.on('value', (snapshot) => {
+                if (isSyncing) return; // Don't update if we're the ones who just changed it
+                
+                const data = snapshot.val();
+                if (data && Array.isArray(data)) {
+                    pantryItems = data;
+                    localStorage.setItem('pantry-items', JSON.stringify(pantryItems));
+                    renderPantry();
+                    console.log('Synced from Firebase:', pantryItems);
+                }
+            });
+            
+            console.log('Real-time sync enabled!');
+        }
 
         async function loadPantry() {
-            try {
-                const stored = localStorage.getItem('pantry-items');
-                if (stored) {
-                    pantryItems = JSON.parse(stored);
-                    console.log('Loaded pantry items:', pantryItems);
-                } else {
-                    pantryItems = [];
-                    console.log('No pantry items found, starting fresh');
+            if (isFirebaseReady) {
+                // Load from Firebase
+                try {
+                    const snapshot = await database.ref('vaillancourt-pantry').once('value');
+                    const data = snapshot.val();
+                    if (data && Array.isArray(data)) {
+                        pantryItems = data;
+                    } else {
+                        // Check localStorage as fallback
+                        const stored = localStorage.getItem('pantry-items');
+                        pantryItems = stored ? JSON.parse(stored) : [];
+                    }
+                } catch (error) {
+                    console.log('Error loading from Firebase, using localStorage:', error);
+                    const stored = localStorage.getItem('pantry-items');
+                    pantryItems = stored ? JSON.parse(stored) : [];
                 }
-            } catch (error) {
-                console.log('Error loading pantry, starting fresh:', error);
-                pantryItems = [];
+            } else {
+                // Use localStorage only
+                const stored = localStorage.getItem('pantry-items');
+                pantryItems = stored ? JSON.parse(stored) : [];
             }
+            
             renderPantry();
         }
 
         async function savePantry() {
-            try {
-                localStorage.setItem('pantry-items', JSON.stringify(pantryItems));
-                console.log('Saved pantry items:', pantryItems);
-            } catch (error) {
-                console.error('Error saving pantry:', error);
-                alert('Error saving items. Please try again.');
+            // Save to localStorage first (instant)
+            localStorage.setItem('pantry-items', JSON.stringify(pantryItems));
+            
+            // Then sync to Firebase (if available)
+            if (isFirebaseReady) {
+                try {
+                    isSyncing = true;
+                    await database.ref('vaillancourt-pantry').set(pantryItems);
+                    console.log('Synced to Firebase:', pantryItems);
+                    isSyncing = false;
+                } catch (error) {
+                    console.error('Error syncing to Firebase:', error);
+                    isSyncing = false;
+                }
             }
         }
 
@@ -606,58 +678,6 @@
         document.getElementById('manualItem').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 document.getElementById('addManual').click();
-            }
-        });
-
-        // Sync functionality
-        document.getElementById('syncCopy').addEventListener('click', async () => {
-            const syncData = JSON.stringify(pantryItems);
-            try {
-                await navigator.clipboard.writeText(syncData);
-                alert('✓ Pantry list copied! Send this to your wife so she can paste it on her phone.');
-            } catch (error) {
-                // Fallback for older browsers
-                const textArea = document.createElement('textarea');
-                textArea.value = syncData;
-                document.body.appendChild(textArea);
-                textArea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textArea);
-                alert('✓ Pantry list copied! Send this to your wife so she can paste it on her phone.');
-            }
-        });
-
-        document.getElementById('syncPaste').addEventListener('click', async () => {
-            try {
-                const syncData = await navigator.clipboard.readText();
-                const newItems = JSON.parse(syncData);
-                
-                if (Array.isArray(newItems)) {
-                    pantryItems = newItems;
-                    await savePantry();
-                    renderPantry();
-                    alert('✓ Pantry list updated from shared data!');
-                } else {
-                    alert('Invalid data. Please copy the list from the other device first.');
-                }
-            } catch (error) {
-                // Manual paste fallback
-                const pastedData = prompt('Paste the pantry list here:');
-                if (pastedData) {
-                    try {
-                        const newItems = JSON.parse(pastedData);
-                        if (Array.isArray(newItems)) {
-                            pantryItems = newItems;
-                            await savePantry();
-                            renderPantry();
-                            alert('✓ Pantry list updated from shared data!');
-                        } else {
-                            alert('Invalid data format.');
-                        }
-                    } catch (e) {
-                        alert('Error parsing data. Make sure you copied the complete list.');
-                    }
-                }
             }
         });
 
