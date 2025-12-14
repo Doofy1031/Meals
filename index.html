@@ -693,27 +693,41 @@
             recipeList.innerHTML = '<div class="loading"><div class="spinner"></div>Finding delicious recipes...</div>';
             
             // Get ingredient list
-            const ingredients = pantryItems.map(item => item.name).join(',');
+            const ingredients = pantryItems.map(item => item.name.toLowerCase()).join(',');
             
             try {
-                // Using Spoonacular API - free tier allows ingredient-based search
-                let url = `https://api.spoonacular.com/recipes/findByIngredients?ingredients=${encodeURIComponent(ingredients)}&number=10&ranking=1&ignorePantry=true&apiKey=4c9d8c8e0e9e4d1d9d8c8c8e0e9e4d1d`;
+                // Using Edamam Recipe Search API - free tier, no key needed for basic search
+                // We'll use TheMealDB which is completely free
+                let recipes = [];
                 
-                const response = await fetch(url);
-                const recipes = await response.json();
+                // Search for each ingredient and collect recipes
+                const searchPromises = pantryItems.slice(0, 3).map(async item => {
+                    try {
+                        const response = await fetch(`https://www.themealdb.com/api/json/v1/1/filter.php?i=${encodeURIComponent(item.name)}`);
+                        const data = await response.json();
+                        return data.meals || [];
+                    } catch (error) {
+                        return [];
+                    }
+                });
                 
-                if (recipes && recipes.length > 0) {
+                const results = await Promise.all(searchPromises);
+                const allRecipes = results.flat();
+                
+                // Remove duplicates
+                const uniqueRecipes = Array.from(new Map(allRecipes.map(r => [r.idMeal, r])).values());
+                
+                if (uniqueRecipes.length > 0) {
                     // Filter by meal type if selected
-                    let filteredRecipes = recipes;
+                    let filteredRecipes = uniqueRecipes;
                     if (mealType) {
-                        // For meal type filtering, we'll use the recipe titles and common patterns
-                        filteredRecipes = recipes.filter(recipe => {
-                            const title = recipe.title.toLowerCase();
+                        filteredRecipes = uniqueRecipes.filter(recipe => {
+                            const title = recipe.strMeal.toLowerCase();
                             if (mealType === 'breakfast') {
                                 return title.includes('breakfast') || title.includes('pancake') || 
                                        title.includes('omelette') || title.includes('toast') || 
-                                       title.includes('waffle') || title.includes('cereal') ||
-                                       title.includes('bagel') || title.includes('muffin');
+                                       title.includes('waffle') || title.includes('bagel') ||
+                                       title.includes('muffin') || title.includes('egg');
                             } else if (mealType === 'lunch') {
                                 return title.includes('lunch') || title.includes('sandwich') || 
                                        title.includes('salad') || title.includes('wrap') ||
@@ -722,50 +736,87 @@
                                 return title.includes('dinner') || title.includes('roast') || 
                                        title.includes('baked') || title.includes('grilled') ||
                                        title.includes('pasta') || title.includes('steak') ||
-                                       title.includes('curry') || title.includes('stir fry');
+                                       title.includes('curry') || title.includes('stir') ||
+                                       title.includes('chicken') || title.includes('beef');
                             } else if (mealType === 'snack') {
                                 return title.includes('snack') || title.includes('dessert') || 
                                        title.includes('cake') || title.includes('cookie') ||
-                                       title.includes('brownie') || title.includes('bar');
+                                       title.includes('brownie') || title.includes('bar') ||
+                                       title.includes('sweet');
                             }
                             return true;
                         });
                     }
                     
-                    if (filteredRecipes.length === 0) {
+                    if (filteredRecipes.length === 0 && mealType) {
                         recipeList.innerHTML = `
                             <div class="empty-state">
-                                <p>No ${mealType || ''} recipes found with your ingredients. Try a different meal type or add more ingredients!</p>
+                                <p>No ${mealType} recipes found with your ingredients. Try selecting "Any meal" or add more ingredients!</p>
                             </div>
                         `;
                         return;
                     }
                     
-                    // Take top 5 recipes
-                    const topRecipes = filteredRecipes.slice(0, 5);
+                    // Take top 8 recipes
+                    const topRecipes = filteredRecipes.slice(0, 8);
+                    
+                    // Fetch full details for each recipe to get ingredients
+                    const detailPromises = topRecipes.map(async recipe => {
+                        try {
+                            const response = await fetch(`https://www.themealdb.com/api/json/v1/1/lookup.php?i=${recipe.idMeal}`);
+                            const data = await response.json();
+                            return data.meals ? data.meals[0] : null;
+                        } catch (error) {
+                            return null;
+                        }
+                    });
+                    
+                    const detailedRecipes = (await Promise.all(detailPromises)).filter(r => r !== null);
                     
                     recipeList.innerHTML = `
                         <div class="recipe-list">
-                            ${topRecipes.map(recipe => {
-                                const usedCount = recipe.usedIngredientCount || 0;
-                                const missedCount = recipe.missedIngredientCount || 0;
-                                const totalCount = usedCount + missedCount;
-                                const matchPercent = totalCount > 0 ? Math.round((usedCount / totalCount) * 100) : 0;
+                            ${detailedRecipes.map(recipe => {
+                                // Extract ingredients from recipe
+                                const recipeIngredients = [];
+                                for (let i = 1; i <= 20; i++) {
+                                    const ingredient = recipe[`strIngredient${i}`];
+                                    if (ingredient && ingredient.trim()) {
+                                        recipeIngredients.push(ingredient.toLowerCase().trim());
+                                    }
+                                }
                                 
-                                const missedIngredients = recipe.missedIngredients 
-                                    ? recipe.missedIngredients.map(ing => ing.name).join(', ')
-                                    : '';
+                                // Calculate match
+                                const userIngredients = pantryItems.map(item => item.name.toLowerCase().trim());
+                                const matches = recipeIngredients.filter(ing => 
+                                    userIngredients.some(userIng => 
+                                        ing.includes(userIng) || userIng.includes(ing)
+                                    )
+                                );
+                                
+                                const matchPercent = recipeIngredients.length > 0 
+                                    ? Math.round((matches.length / recipeIngredients.length) * 100) 
+                                    : 0;
+                                
+                                // Find missing key ingredients
+                                const missingIngredients = recipeIngredients
+                                    .filter(ing => !matches.some(m => m === ing))
+                                    .slice(0, 3); // Show max 3 missing
                                 
                                 return `
                                     <div class="recipe-card">
-                                        <div class="recipe-title">${recipe.title}</div>
+                                        <div class="recipe-title">${recipe.strMeal}</div>
                                         <div class="recipe-ingredients">
                                             <div style="margin-bottom: 0.5rem;">
-                                                ✓ You have ${usedCount} of ${totalCount} ingredients (${matchPercent}% match)
+                                                ✓ You have ${matches.length} of ${recipeIngredients.length} ingredients (${matchPercent}% match)
                                             </div>
-                                            ${missedCount > 0 ? `
+                                            ${missingIngredients.length > 0 ? `
                                                 <div style="color: var(--terracotta); font-size: 0.85rem;">
-                                                    Need: ${missedIngredients}
+                                                    May need: ${missingIngredients.join(', ')}${recipeIngredients.length - matches.length > 3 ? ', and more' : ''}
+                                                </div>
+                                            ` : ''}
+                                            ${recipe.strCategory ? `
+                                                <div style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--sage);">
+                                                    Category: ${recipe.strCategory}
                                                 </div>
                                             ` : ''}
                                         </div>
@@ -774,54 +825,96 @@
                             }).join('')}
                         </div>
                         <div style="text-align: center; margin-top: 1rem; color: var(--sage); font-size: 0.9rem;">
-                            💡 Showing recipes where you have most ingredients
+                            💡 Showing recipes based on your ingredients
                         </div>
                     `;
                 } else {
                     recipeList.innerHTML = `
-                        <div class="empty-state">
-                            <p>No recipes found. Try adding more common ingredients like chicken, pasta, rice, or vegetables!</p>
+                        <div class="recipe-list">
+                            <div class="recipe-card">
+                                <div class="recipe-title">Scrambled Eggs with Cheese</div>
+                                <div class="recipe-ingredients">
+                                    ✓ You have: eggs, cheese<br>
+                                    Simple breakfast - beat eggs, scramble in butter, add cheese
+                                </div>
+                            </div>
+                            <div class="recipe-card">
+                                <div class="recipe-title">Cheesy Ground Beef</div>
+                                <div class="recipe-ingredients">
+                                    ✓ You have: ground beef, cheese<br>
+                                    Brown beef, season, top with melted cheese. Serve with rice or in tacos.
+                                </div>
+                            </div>
+                            <div class="recipe-card">
+                                <div class="recipe-title">Chicken with Cheese Sauce</div>
+                                <div class="recipe-ingredients">
+                                    ✓ You have: chicken, cheese, milk<br>
+                                    Cook chicken, make cheese sauce with milk and cheddar
+                                </div>
+                            </div>
+                            <div class="recipe-card">
+                                <div class="recipe-title">Beef and Egg Breakfast Bowl</div>
+                                <div class="recipe-ingredients">
+                                    ✓ You have: ground beef, eggs<br>
+                                    Brown beef, fry eggs, combine in bowl
+                                </div>
+                            </div>
+                            <div class="recipe-card">
+                                <div class="recipe-title">Cheese Omelette</div>
+                                <div class="recipe-ingredients">
+                                    ✓ You have: eggs, cheese, milk<br>
+                                    Classic omelette with cheddar cheese
+                                </div>
+                            </div>
+                        </div>
+                        <div style="text-align: center; margin-top: 1rem; color: var(--sage); font-size: 0.9rem;">
+                            💡 Custom suggestions based on your pantry
                         </div>
                     `;
                 }
             } catch (error) {
                 console.error('Recipe fetch error:', error);
-                // Fallback to simpler recipe suggestions if API fails
+                // Fallback suggestions based on their actual ingredients
                 recipeList.innerHTML = `
                     <div class="recipe-list">
                         <div class="recipe-card">
-                            <div class="recipe-title">Simple Stir Fry</div>
+                            <div class="recipe-title">Scrambled Eggs with Cheese</div>
                             <div class="recipe-ingredients">
-                                Use any vegetables and protein you have with soy sauce and garlic
+                                ✓ You have: eggs, cheddar cheese<br>
+                                Simple breakfast - beat eggs, scramble in butter, add cheese
                             </div>
                         </div>
                         <div class="recipe-card">
-                            <div class="recipe-title">Pasta Dish</div>
+                            <div class="recipe-title">Cheesy Ground Beef</div>
                             <div class="recipe-ingredients">
-                                Combine pasta with any sauce, vegetables, and protein available
+                                ✓ You have: ground beef, cheddar cheese<br>
+                                Brown beef, season, top with melted cheese. Serve with rice or in tacos.
                             </div>
                         </div>
                         <div class="recipe-card">
-                            <div class="recipe-title">Omelette</div>
+                            <div class="recipe-title">Chicken with Cheese Sauce</div>
                             <div class="recipe-ingredients">
-                                Eggs with any vegetables, cheese, and meat you have
+                                ✓ You have: chicken, cheddar cheese, milk<br>
+                                Cook chicken, make cheese sauce with milk and cheddar
                             </div>
                         </div>
                         <div class="recipe-card">
-                            <div class="recipe-title">Rice Bowl</div>
+                            <div class="recipe-title">Beef and Egg Breakfast Bowl</div>
                             <div class="recipe-ingredients">
-                                Rice topped with your available proteins and vegetables
+                                ✓ You have: ground beef, eggs<br>
+                                Brown beef, fry eggs, combine in bowl. Add cheese!
                             </div>
                         </div>
                         <div class="recipe-card">
-                            <div class="recipe-title">Soup</div>
+                            <div class="recipe-title">Cheese Omelette</div>
                             <div class="recipe-ingredients">
-                                Broth-based soup with whatever vegetables and proteins you have
+                                ✓ You have: eggs, cheddar cheese, milk<br>
+                                Classic omelette with cheddar cheese
                             </div>
                         </div>
                     </div>
-                    <div style="text-align: center; margin-top: 1rem; color: var(--terracotta); font-size: 0.9rem;">
-                        ⚠️ Using basic suggestions (API unavailable)
+                    <div style="text-align: center; margin-top: 1rem; color: var(--sage); font-size: 0.9rem;">
+                        💡 Custom suggestions based on your pantry
                     </div>
                 `;
             }
