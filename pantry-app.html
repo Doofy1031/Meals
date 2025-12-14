@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vaillancourt Family Meal Prepping</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Work+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        :root {
+            --cream: #FFF8F0;
+            --terracotta: #D4665A;
+            --sage: #7A9B7F;
+            --charcoal: #2C2C2C;
+            --warm-white: #FFFEF9;
+            --soft-shadow: rgba(44, 44, 44, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Work Sans', sans-serif;
+            background: linear-gradient(135deg, var(--cream) 0%, #FFF5E8 100%);
+            min-height: 100vh;
+            color: var(--charcoal);
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: var(--warm-white);
+            padding: 2rem 1.5rem;
+            box-shadow: 0 4px 20px var(--soft-shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 3px solid var(--terracotta);
+        }
+
+        h1 {
+            font-family: 'Fraunces', serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--terracotta);
+            letter-spacing: -0.02em;
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--sage);
+            font-size: 0.95rem;
+            font-weight: 300;
+            letter-spacing: 0.05em;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+        }
+
+        .section {
+            background: var(--warm-white);
+            border-radius: 20px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 8px 30px var(--soft-shadow);
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        h2 {
+            font-family: 'Fraunces', serif;
+            font-size: 1.8rem;
+            color: var(--charcoal);
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .icon {
+            font-size: 1.5rem;
+        }
+
+        button {
+            background: var(--terracotta);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            font-family: 'Work Sans', sans-serif;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(212, 102, 90, 0.3);
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+
+        button:hover {
+            background: #C45549;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(212, 102, 90, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.secondary {
+            background: var(--sage);
+            box-shadow: 0 4px 15px rgba(122, 155, 127, 0.3);
+        }
+
+        button.secondary:hover {
+            background: #6A8A6F;
+        }
+
+        #scanner {
+            width: 100%;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        #scanner.active {
+            display: block;
+        }
+
+        .pantry-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .pantry-item {
+            background: linear-gradient(135deg, var(--cream) 0%, #FFF3E5 100%);
+            padding: 1.5rem 1rem;
+            border-radius: 15px;
+            text-align: center;
+            position: relative;
+            box-shadow: 0 2px 10px var(--soft-shadow);
+            transition: all 0.3s ease;
+            animation: slideIn 0.4s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .pantry-item:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 6px 20px var(--soft-shadow);
+        }
+
+        .pantry-item-name {
+            font-weight: 500;
+            color: var(--charcoal);
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
+            line-height: 1.3;
+        }
+
+        .pantry-item-brand {
+            font-size: 0.75rem;
+            color: var(--sage);
+            margin-bottom: 0.5rem;
+        }
+
+        .remove-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: var(--terracotta);
+            color: white;
+            border: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            font-size: 0.8rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 5px rgba(212, 102, 90, 0.3);
+        }
+
+        .remove-btn:hover {
+            background: #C45549;
+            transform: scale(1.1);
+        }
+
+        .recipe-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .recipe-card {
+            background: linear-gradient(135deg, #FFFEF9 0%, #FFF8F0 100%);
+            padding: 1.5rem;
+            border-radius: 15px;
+            border-left: 4px solid var(--sage);
+            box-shadow: 0 2px 10px var(--soft-shadow);
+            transition: all 0.3s ease;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .recipe-card:hover {
+            transform: translateX(4px);
+            box-shadow: 0 4px 15px var(--soft-shadow);
+        }
+
+        .recipe-title {
+            font-family: 'Fraunces', serif;
+            font-size: 1.3rem;
+            color: var(--charcoal);
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .recipe-ingredients {
+            font-size: 0.9rem;
+            color: var(--sage);
+            line-height: 1.6;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--sage);
+        }
+
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: var(--sage);
+        }
+
+        .spinner {
+            border: 3px solid var(--cream);
+            border-top: 3px solid var(--terracotta);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .manual-input {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .manual-input input {
+            flex: 1;
+            padding: 0.8rem 1rem;
+            border: 2px solid var(--cream);
+            border-radius: 50px;
+            font-family: 'Work Sans', sans-serif;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+        }
+
+        .manual-input input:focus {
+            outline: none;
+            border-color: var(--sage);
+            box-shadow: 0 0 0 3px rgba(122, 155, 127, 0.1);
+        }
+
+        .manual-input button {
+            width: auto;
+            margin: 0;
+            padding: 0.8rem 1.5rem;
+        }
+
+        .error {
+            background: #FFE5E5;
+            border: 2px solid #FF6B6B;
+            color: #C92A2A;
+            padding: 1rem;
+            border-radius: 10px;
+            margin-top: 1rem;
+            text-align: center;
+        }
+
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .section {
+                padding: 1.5rem;
+            }
+            
+            .pantry-grid {
+                grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Vaillancourt Family Meal Prepping</h1>
+        <div class="subtitle">YOUR PERSONAL PANTRY ASSISTANT</div>
+    </div>
+
+    <div class="container">
+        <div class="section">
+            <h2><span class="icon">📸</span> Scan Items</h2>
+            <button id="startScan">Start Barcode Scanner</button>
+            <button id="stopScan" style="display: none;" class="secondary">Stop Scanner</button>
+            <div id="scanner"></div>
+            <div id="scanResult"></div>
+            
+            <div style="text-align: center; margin: 1.5rem 0; color: var(--sage);">— or —</div>
+            
+            <div class="manual-input">
+                <input type="text" id="manualItem" placeholder="Add item manually (e.g., eggs, milk)">
+                <button id="addManual">Add</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2><span class="icon">🥘</span> Your Pantry</h2>
+            <div id="pantryList">
+                <div class="empty-state">
+                    <div class="empty-state-icon">🍽️</div>
+                    <p>Your pantry is empty. Start scanning items!</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2><span class="icon">✨</span> Recipe Ideas</h2>
+            <button id="getRecipes">Find Recipes</button>
+            <div id="recipeList"></div>
+        </div>
+    </div>
+
+    <script>
+        // Password protection
+        const CORRECT_PASSWORD = 'VaillancourtMeals2024'; // Change this to whatever you want
+        let isAuthenticated = sessionStorage.getItem('pantryAuth') === 'true';
+
+        function checkPassword() {
+            const password = prompt('Enter password to access Vaillancourt Family Meal Prepping:');
+            if (password === CORRECT_PASSWORD) {
+                sessionStorage.setItem('pantryAuth', 'true');
+                isAuthenticated = true;
+                init();
+            } else if (password !== null) {
+                alert('Incorrect password!');
+                checkPassword();
+            }
+        }
+
+        function init() {
+            document.body.style.display = 'block';
+            loadPantry();
+        }
+
+        // Hide body until authenticated
+        if (!isAuthenticated) {
+            document.body.style.display = 'none';
+            window.addEventListener('DOMContentLoaded', checkPassword);
+        } else {
+            window.addEventListener('DOMContentLoaded', init);
+        }
+
+        let html5QrCode;
+        let pantryItems = [];
+
+        async function loadPantry() {
+            try {
+                const result = await window.storage.get('pantry-items', true);
+                pantryItems = result ? JSON.parse(result.value) : [];
+            } catch (error) {
+                console.log('No existing pantry data, starting fresh');
+                pantryItems = [];
+            }
+            renderPantry();
+        }
+
+        async function savePantry() {
+            try {
+                await window.storage.set('pantry-items', JSON.stringify(pantryItems), true);
+            } catch (error) {
+                console.error('Error saving pantry:', error);
+            }
+        }
+
+        function renderPantry() {
+            const pantryList = document.getElementById('pantryList');
+            
+            if (pantryItems.length === 0) {
+                pantryList.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🍽️</div>
+                        <p>Your pantry is empty. Start scanning items!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            pantryList.innerHTML = `
+                <div class="pantry-grid">
+                    ${pantryItems.map((item, index) => `
+                        <div class="pantry-item">
+                            <button class="remove-btn" onclick="removeItem(${index})">×</button>
+                            <div class="pantry-item-name">${item.name}</div>
+                            ${item.brand ? `<div class="pantry-item-brand">${item.brand}</div>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        window.removeItem = async function(index) {
+            pantryItems.splice(index, 1);
+            await savePantry();
+            renderPantry();
+        };
+
+        async function lookupBarcode(barcode) {
+            const scanResult = document.getElementById('scanResult');
+            scanResult.innerHTML = '<div class="loading"><div class="spinner"></div>Looking up product...</div>';
+            
+            try {
+                const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+                const data = await response.json();
+                
+                if (data.status === 1) {
+                    const product = data.product;
+                    const item = {
+                        name: product.product_name || 'Unknown Product',
+                        brand: product.brands || '',
+                        barcode: barcode
+                    };
+                    
+                    // Check if item already exists
+                    const exists = pantryItems.some(i => i.barcode === barcode);
+                    if (!exists) {
+                        pantryItems.push(item);
+                        await savePantry();
+                        renderPantry();
+                        scanResult.innerHTML = `<div style="background: #E8F5E9; color: #2E7D32; padding: 1rem; border-radius: 10px; text-align: center; margin-top: 1rem;">✓ Added: ${item.name}</div>`;
+                    } else {
+                        scanResult.innerHTML = `<div style="background: #FFF3E0; color: #E65100; padding: 1rem; border-radius: 10px; text-align: center; margin-top: 1rem;">Already in pantry: ${item.name}</div>`;
+                    }
+                } else {
+                    scanResult.innerHTML = '<div class="error">Product not found in database. Try adding it manually.</div>';
+                }
+            } catch (error) {
+                scanResult.innerHTML = '<div class="error">Error looking up product. Try again or add manually.</div>';
+            }
+            
+            setTimeout(() => {
+                scanResult.innerHTML = '';
+            }, 3000);
+        }
+
+        document.getElementById('startScan').addEventListener('click', async () => {
+            const scanner = document.getElementById('scanner');
+            const scanResult = document.getElementById('scanResult');
+            
+            // First, explicitly request camera permission
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment" } 
+                });
+                // Stop the stream immediately - we just needed permission
+                stream.getTracks().forEach(track => track.stop());
+            } catch (permError) {
+                scanResult.innerHTML = '<div class="error">Camera permission denied. Please enable camera access in your browser settings and try again.</div>';
+                return;
+            }
+            
+            scanner.classList.add('active');
+            document.getElementById('startScan').style.display = 'none';
+            document.getElementById('stopScan').style.display = 'block';
+            
+            html5QrCode = new Html5Qrcode("scanner");
+            
+            try {
+                await html5QrCode.start(
+                    { facingMode: "environment" },
+                    {
+                        fps: 10,
+                        qrbox: { width: 250, height: 250 },
+                        aspectRatio: 1.0
+                    },
+                    (decodedText) => {
+                        lookupBarcode(decodedText);
+                    },
+                    (errorMessage) => {
+                        // Ignore scanning errors - they happen constantly
+                    }
+                );
+            } catch (err) {
+                console.error('Scanner error:', err);
+                scanResult.innerHTML = '<div class="error">Unable to start camera. Please use manual input instead.</div>';
+                scanner.classList.remove('active');
+                document.getElementById('startScan').style.display = 'block';
+                document.getElementById('stopScan').style.display = 'none';
+            }
+        });
+
+        document.getElementById('stopScan').addEventListener('click', async () => {
+            if (html5QrCode) {
+                await html5QrCode.stop();
+                document.getElementById('scanner').classList.remove('active');
+                document.getElementById('startScan').style.display = 'block';
+                document.getElementById('stopScan').style.display = 'none';
+            }
+        });
+
+        document.getElementById('addManual').addEventListener('click', async () => {
+            const input = document.getElementById('manualItem');
+            const itemName = input.value.trim();
+            
+            if (itemName) {
+                const item = {
+                    name: itemName,
+                    brand: '',
+                    barcode: ''
+                };
+                
+                pantryItems.push(item);
+                await savePantry();
+                renderPantry();
+                input.value = '';
+            }
+        });
+
+        document.getElementById('manualItem').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('addManual').click();
+            }
+        });
+
+        document.getElementById('getRecipes').addEventListener('click', async () => {
+            const recipeList = document.getElementById('recipeList');
+            
+            if (pantryItems.length === 0) {
+                recipeList.innerHTML = '<div class="empty-state"><p>Add items to your pantry first!</p></div>';
+                return;
+            }
+            
+            recipeList.innerHTML = '<div class="loading"><div class="spinner"></div>Finding delicious recipes...</div>';
+            
+            const ingredients = pantryItems.map(item => item.name).join(',');
+            
+            try {
+                // Using TheMealDB API (free, no key required)
+                const response = await fetch(`https://www.themealdb.com/api/json/v1/1/filter.php?i=${pantryItems[0].name}`);
+                const data = await response.json();
+                
+                if (data.meals && data.meals.length > 0) {
+                    const recipes = data.meals.slice(0, 5);
+                    
+                    recipeList.innerHTML = `
+                        <div class="recipe-list">
+                            ${recipes.map(recipe => `
+                                <div class="recipe-card">
+                                    <div class="recipe-title">${recipe.strMeal}</div>
+                                    <div class="recipe-ingredients">Contains: ${pantryItems[0].name}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div style="text-align: center; margin-top: 1rem; color: var(--sage); font-size: 0.9rem;">
+                            💡 Tip: Add more ingredients for better recipe matches!
+                        </div>
+                    `;
+                } else {
+                    recipeList.innerHTML = `
+                        <div class="empty-state">
+                            <p>No recipes found with current ingredients. Try adding more common items like chicken, pasta, or vegetables!</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                recipeList.innerHTML = `
+                    <div class="error">
+                        Unable to fetch recipes. Please check your internet connection.
+                    </div>
+                `;
+            }
+        });
+
+        // Authentication will call loadPantry() via init()
+    </script>
+</body>
+</html>
