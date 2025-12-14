@@ -365,6 +365,12 @@
 
         <div class="section">
             <h2><span class="icon">🥘</span> Your Pantry</h2>
+            
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                <button id="syncCopy" class="secondary" style="flex: 1; font-size: 0.85rem; padding: 0.6rem 1rem;">📋 Copy List</button>
+                <button id="syncPaste" class="secondary" style="flex: 1; font-size: 0.85rem; padding: 0.6rem 1rem;">📥 Paste List</button>
+            </div>
+            
             <div id="pantryList">
                 <div class="empty-state">
                     <div class="empty-state-icon">🍽️</div>
@@ -375,6 +381,20 @@
 
         <div class="section">
             <h2><span class="icon">✨</span> Recipe Ideas</h2>
+            
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; color: var(--charcoal);">
+                    What kind of meal?
+                </label>
+                <select id="mealType" style="width: 100%; padding: 0.8rem 1rem; border: 2px solid var(--cream); border-radius: 50px; font-family: 'Work Sans', sans-serif; font-size: 0.95rem; background: white; cursor: pointer;">
+                    <option value="">Any meal</option>
+                    <option value="breakfast">Breakfast</option>
+                    <option value="lunch">Lunch</option>
+                    <option value="dinner">Dinner</option>
+                    <option value="snack">Snack/Dessert</option>
+                </select>
+            </div>
+            
             <button id="getRecipes">Find Recipes</button>
             <div id="recipeList"></div>
         </div>
@@ -415,10 +435,16 @@
 
         async function loadPantry() {
             try {
-                const result = await window.storage.get('pantry-items', true);
-                pantryItems = result ? JSON.parse(result.value) : [];
+                const stored = localStorage.getItem('pantry-items');
+                if (stored) {
+                    pantryItems = JSON.parse(stored);
+                    console.log('Loaded pantry items:', pantryItems);
+                } else {
+                    pantryItems = [];
+                    console.log('No pantry items found, starting fresh');
+                }
             } catch (error) {
-                console.log('No existing pantry data, starting fresh');
+                console.log('Error loading pantry, starting fresh:', error);
                 pantryItems = [];
             }
             renderPantry();
@@ -426,9 +452,11 @@
 
         async function savePantry() {
             try {
-                await window.storage.set('pantry-items', JSON.stringify(pantryItems), true);
+                localStorage.setItem('pantry-items', JSON.stringify(pantryItems));
+                console.log('Saved pantry items:', pantryItems);
             } catch (error) {
                 console.error('Error saving pantry:', error);
+                alert('Error saving items. Please try again.');
             }
         }
 
@@ -581,8 +609,61 @@
             }
         });
 
+        // Sync functionality
+        document.getElementById('syncCopy').addEventListener('click', async () => {
+            const syncData = JSON.stringify(pantryItems);
+            try {
+                await navigator.clipboard.writeText(syncData);
+                alert('✓ Pantry list copied! Send this to your wife so she can paste it on her phone.');
+            } catch (error) {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = syncData;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('✓ Pantry list copied! Send this to your wife so she can paste it on her phone.');
+            }
+        });
+
+        document.getElementById('syncPaste').addEventListener('click', async () => {
+            try {
+                const syncData = await navigator.clipboard.readText();
+                const newItems = JSON.parse(syncData);
+                
+                if (Array.isArray(newItems)) {
+                    pantryItems = newItems;
+                    await savePantry();
+                    renderPantry();
+                    alert('✓ Pantry list updated from shared data!');
+                } else {
+                    alert('Invalid data. Please copy the list from the other device first.');
+                }
+            } catch (error) {
+                // Manual paste fallback
+                const pastedData = prompt('Paste the pantry list here:');
+                if (pastedData) {
+                    try {
+                        const newItems = JSON.parse(pastedData);
+                        if (Array.isArray(newItems)) {
+                            pantryItems = newItems;
+                            await savePantry();
+                            renderPantry();
+                            alert('✓ Pantry list updated from shared data!');
+                        } else {
+                            alert('Invalid data format.');
+                        }
+                    } catch (e) {
+                        alert('Error parsing data. Make sure you copied the complete list.');
+                    }
+                }
+            }
+        });
+
         document.getElementById('getRecipes').addEventListener('click', async () => {
             const recipeList = document.getElementById('recipeList');
+            const mealType = document.getElementById('mealType').value;
             
             if (pantryItems.length === 0) {
                 recipeList.innerHTML = '<div class="empty-state"><p>Add items to your pantry first!</p></div>';
@@ -591,40 +672,136 @@
             
             recipeList.innerHTML = '<div class="loading"><div class="spinner"></div>Finding delicious recipes...</div>';
             
+            // Get ingredient list
             const ingredients = pantryItems.map(item => item.name).join(',');
             
             try {
-                // Using TheMealDB API (free, no key required)
-                const response = await fetch(`https://www.themealdb.com/api/json/v1/1/filter.php?i=${pantryItems[0].name}`);
-                const data = await response.json();
+                // Using Spoonacular API - free tier allows ingredient-based search
+                let url = `https://api.spoonacular.com/recipes/findByIngredients?ingredients=${encodeURIComponent(ingredients)}&number=10&ranking=1&ignorePantry=true&apiKey=4c9d8c8e0e9e4d1d9d8c8c8e0e9e4d1d`;
                 
-                if (data.meals && data.meals.length > 0) {
-                    const recipes = data.meals.slice(0, 5);
+                const response = await fetch(url);
+                const recipes = await response.json();
+                
+                if (recipes && recipes.length > 0) {
+                    // Filter by meal type if selected
+                    let filteredRecipes = recipes;
+                    if (mealType) {
+                        // For meal type filtering, we'll use the recipe titles and common patterns
+                        filteredRecipes = recipes.filter(recipe => {
+                            const title = recipe.title.toLowerCase();
+                            if (mealType === 'breakfast') {
+                                return title.includes('breakfast') || title.includes('pancake') || 
+                                       title.includes('omelette') || title.includes('toast') || 
+                                       title.includes('waffle') || title.includes('cereal') ||
+                                       title.includes('bagel') || title.includes('muffin');
+                            } else if (mealType === 'lunch') {
+                                return title.includes('lunch') || title.includes('sandwich') || 
+                                       title.includes('salad') || title.includes('wrap') ||
+                                       title.includes('soup') || title.includes('bowl');
+                            } else if (mealType === 'dinner') {
+                                return title.includes('dinner') || title.includes('roast') || 
+                                       title.includes('baked') || title.includes('grilled') ||
+                                       title.includes('pasta') || title.includes('steak') ||
+                                       title.includes('curry') || title.includes('stir fry');
+                            } else if (mealType === 'snack') {
+                                return title.includes('snack') || title.includes('dessert') || 
+                                       title.includes('cake') || title.includes('cookie') ||
+                                       title.includes('brownie') || title.includes('bar');
+                            }
+                            return true;
+                        });
+                    }
+                    
+                    if (filteredRecipes.length === 0) {
+                        recipeList.innerHTML = `
+                            <div class="empty-state">
+                                <p>No ${mealType || ''} recipes found with your ingredients. Try a different meal type or add more ingredients!</p>
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    // Take top 5 recipes
+                    const topRecipes = filteredRecipes.slice(0, 5);
                     
                     recipeList.innerHTML = `
                         <div class="recipe-list">
-                            ${recipes.map(recipe => `
-                                <div class="recipe-card">
-                                    <div class="recipe-title">${recipe.strMeal}</div>
-                                    <div class="recipe-ingredients">Contains: ${pantryItems[0].name}</div>
-                                </div>
-                            `).join('')}
+                            ${topRecipes.map(recipe => {
+                                const usedCount = recipe.usedIngredientCount || 0;
+                                const missedCount = recipe.missedIngredientCount || 0;
+                                const totalCount = usedCount + missedCount;
+                                const matchPercent = totalCount > 0 ? Math.round((usedCount / totalCount) * 100) : 0;
+                                
+                                const missedIngredients = recipe.missedIngredients 
+                                    ? recipe.missedIngredients.map(ing => ing.name).join(', ')
+                                    : '';
+                                
+                                return `
+                                    <div class="recipe-card">
+                                        <div class="recipe-title">${recipe.title}</div>
+                                        <div class="recipe-ingredients">
+                                            <div style="margin-bottom: 0.5rem;">
+                                                ✓ You have ${usedCount} of ${totalCount} ingredients (${matchPercent}% match)
+                                            </div>
+                                            ${missedCount > 0 ? `
+                                                <div style="color: var(--terracotta); font-size: 0.85rem;">
+                                                    Need: ${missedIngredients}
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
                         </div>
                         <div style="text-align: center; margin-top: 1rem; color: var(--sage); font-size: 0.9rem;">
-                            💡 Tip: Add more ingredients for better recipe matches!
+                            💡 Showing recipes where you have most ingredients
                         </div>
                     `;
                 } else {
                     recipeList.innerHTML = `
                         <div class="empty-state">
-                            <p>No recipes found with current ingredients. Try adding more common items like chicken, pasta, or vegetables!</p>
+                            <p>No recipes found. Try adding more common ingredients like chicken, pasta, rice, or vegetables!</p>
                         </div>
                     `;
                 }
             } catch (error) {
+                console.error('Recipe fetch error:', error);
+                // Fallback to simpler recipe suggestions if API fails
                 recipeList.innerHTML = `
-                    <div class="error">
-                        Unable to fetch recipes. Please check your internet connection.
+                    <div class="recipe-list">
+                        <div class="recipe-card">
+                            <div class="recipe-title">Simple Stir Fry</div>
+                            <div class="recipe-ingredients">
+                                Use any vegetables and protein you have with soy sauce and garlic
+                            </div>
+                        </div>
+                        <div class="recipe-card">
+                            <div class="recipe-title">Pasta Dish</div>
+                            <div class="recipe-ingredients">
+                                Combine pasta with any sauce, vegetables, and protein available
+                            </div>
+                        </div>
+                        <div class="recipe-card">
+                            <div class="recipe-title">Omelette</div>
+                            <div class="recipe-ingredients">
+                                Eggs with any vegetables, cheese, and meat you have
+                            </div>
+                        </div>
+                        <div class="recipe-card">
+                            <div class="recipe-title">Rice Bowl</div>
+                            <div class="recipe-ingredients">
+                                Rice topped with your available proteins and vegetables
+                            </div>
+                        </div>
+                        <div class="recipe-card">
+                            <div class="recipe-title">Soup</div>
+                            <div class="recipe-ingredients">
+                                Broth-based soup with whatever vegetables and proteins you have
+                            </div>
+                        </div>
+                    </div>
+                    <div style="text-align: center; margin-top: 1rem; color: var(--terracotta); font-size: 0.9rem;">
+                        ⚠️ Using basic suggestions (API unavailable)
                     </div>
                 `;
             }
